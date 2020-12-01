@@ -8,7 +8,7 @@ git submodule update --init
 echo
 
 echo "Install G2P backends..."
-sudo apt-get install festival espeak-ng mbrola
+apt-get install festival espeak-ng mbrola
 echo
 
 echo "Installing phonemizer..."
