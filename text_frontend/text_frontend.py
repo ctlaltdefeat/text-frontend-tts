@@ -58,7 +58,7 @@ class TextFrontend(object):
 
         CHARS = _GRAPHEMES if not self.use_phonemes else _PHONEMES
 
-        self.SYMBOLS = [_PAD, _EOS, _SPACE] + _PUNCTUATIONS + _NUMBERS + CHARS
+        self.SYMBOLS = [_PAD, _EOS, _SPACE] + _PUNCTUATIONS + ['¡', '¿'] + _NUMBERS + CHARS
 
         # Mappings from symbol to numeric ID and vice versa:
         self._symbol_to_id = {s: i for i, s in enumerate(self.SYMBOLS)}
