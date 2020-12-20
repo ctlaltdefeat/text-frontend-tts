@@ -1,7 +1,8 @@
 import os
 
 try:
-    from phonemizer.phonemize import phonemize
+    # from phonemizer.phonemize import phonemize
+    from phonemizer.backend import EspeakBackend
     from phonemizer.separator import Separator
 except ModuleNotFoundError:
     print("WARNING! No `phonemizer` package installed.")
@@ -18,9 +19,13 @@ _GRAPHEME_SEP = ""
 _WORD_SEP = "#"
 _NUMBERS = list("0123456789")
 _PUNCTUATIONS = list("(),-.:;!?")
-with open(f"{os.path.dirname(__file__)}/chars/graphemes.txt") as f:
+with open(
+    f"{os.path.dirname(__file__)}/chars/graphemes.txt", encoding="utf8"
+) as f:
     _GRAPHEMES = list(f.read())
-with open(f"{os.path.dirname(__file__)}/chars/phonemes.txt") as f:
+with open(
+    f"{os.path.dirname(__file__)}/chars/phonemes.txt", encoding="utf8"
+) as f:
     _PHONEMES = f.read().split("|")
 
 
@@ -40,6 +45,7 @@ class TextFrontend(object):
         use_phonemes=True,
         n_jobs=1,
         with_stress=True,
+        language="en-us",
     ):
         """
         Text sequencies preprocessor with G2P support.
@@ -55,10 +61,17 @@ class TextFrontend(object):
         self.use_phonemes = use_phonemes
         self.n_jobs = n_jobs
         self.with_stress = with_stress
+        self.language = language
 
         CHARS = _GRAPHEMES if not self.use_phonemes else _PHONEMES
 
-        self.SYMBOLS = [_PAD, _EOS, _SPACE] + _PUNCTUATIONS + ['¡', '¿'] + _NUMBERS + CHARS
+        self.SYMBOLS = (
+            [_PAD, _EOS, _SPACE]
+            + _PUNCTUATIONS
+            + ["¡", "¿"]
+            + _NUMBERS
+            + CHARS
+        )
 
         # Mappings from symbol to numeric ID and vice versa:
         self._symbol_to_id = {s: i for i, s in enumerate(self.SYMBOLS)}
@@ -66,6 +79,12 @@ class TextFrontend(object):
 
         self._separator = Separator(
             word=_WORD_SEP, syllable="", phone=_PHONEME_SEP
+        )
+        self.p = EspeakBackend(
+            self.language,
+            punctuation_marks="".join(_PUNCTUATIONS),
+            preserve_punctuation=True,
+            with_stress=self.with_stress,
         )
 
     @property
@@ -81,13 +100,10 @@ class TextFrontend(object):
             and token != self._symbol_to_id[_EOS]
         )
 
-    def graphemes_to_phonemes(self, text, lang):
+    def graphemes_to_phonemes(self, text):
         """
         Transforms grapheme text representation to phoneme representation.
         :param text: grapheme string
-        :param lang: grapheme language id supported by `espeak` backend (for example, `en-us` or `fr-fr`).
-            Checkout correct language ids in official `espeak` documentation:
-            https://github.com/espeak-ng/espeak-ng/blob/master/docs/languages.md
         :return: phoneme string
         """
         # get punctuation map and preserve from errors
@@ -100,17 +116,20 @@ class TextFrontend(object):
         # ]
 
         # get phonemes
-        phonemes = phonemize(
-            text,
-            strip=True,
-            njobs=self.n_jobs,
-            backend="espeak",
-            separator=self._separator,
-            language=lang,
-            with_stress=self.with_stress,
-            preserve_punctuation=True,
-            punctuation_marks="".join(_PUNCTUATIONS),
+        phonemes = self.p.phonemize(
+            text, separator=self._separator, strip=True, njobs=self.n_jobs
         )
+        # phonemes = phonemize(
+        #     text,
+        #     strip=True,
+        #     njobs=self.n_jobs,
+        #     backend="espeak",
+        #     separator=self._separator,
+        #     language=lang,
+        #     with_stress=self.with_stress,
+        #     preserve_punctuation=True,
+        #     punctuation_marks="".join(_PUNCTUATIONS),
+        # )
         phonemes = phonemes.replace(" ", _WORD_SEP)
         phonemes_new = ""
         for i, c in enumerate(phonemes):
@@ -136,23 +155,20 @@ class TextFrontend(object):
         )
         return phonemes
 
-    def text_to_sequence(self, text, lang=None, just_map=False):
+    def text_to_sequence(self, text, just_map=False):
         """
         Encodes symbolic text into a sequence of character ids, which can be fed to TTS.
         Performs G2P as intermediate step if flag `use_phonemes` is set to `True`.
         :param text: string
-        :param lang: text language id supperted by `espeak` backend (for example, `en-us` or `fr-fr`)
         :param return_phonemes: whether to return idx mappings or phonemes itself if phonemes mode.
         :return: 
         """
         text = clean_text(text, cleaner_names=self.text_cleaners)
 
-        if self.use_phonemes and not just_map:
-            text = self.graphemes_to_phonemes(text, lang=lang)
+        if self.use_phonemes:
+            if not just_map:
+                text = self.graphemes_to_phonemes(text)
             text = text.split(_PHONEME_SEP)
-        elif self.use_phonemes:
-            text = text.split(_PHONEME_SEP)
-
         sequence = [
             self._symbol_to_id[s]
             for s in text
