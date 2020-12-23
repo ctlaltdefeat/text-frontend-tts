@@ -190,3 +190,6 @@ class TextFrontend(object):
         return (_PHONEME_SEP if self.use_phonemes else _GRAPHEME_SEP).join(
             text
         )
+    
+    def __call__(self, text):
+        return self.text_to_sequence(text)
